@@ -1,0 +1,12 @@
+---
+- name: Reload systemd and restart microservice
+  become: yes
+  block:
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Restart microservice systemd service
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+        state: restarted

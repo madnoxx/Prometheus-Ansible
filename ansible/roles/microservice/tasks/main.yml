@@ -1,0 +1,97 @@
+---
+- name: Ensure target application directory exists
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}"
+    state: directory
+    owner: ansible
+    group: ansible
+    mode: '0755'
+  become: yes
+
+- name: Copy microservice application code
+  ansible.builtin.copy:
+    src: ../../../microservice/app.py
+    dest: "{{ app_base_dir }}/app.py"
+    mode: '0644'
+  become: yes
+
+- name: Tasks for VM deployment method
+  when: deploy_method == 'vm'
+  block:
+    - name: Stop and remove container if it exists (switching from container to vm)
+      community.docker.docker_container:
+        name: "{{ service_name }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Install Python pip package
+      ansible.builtin.dnf:
+        name: python3-pip
+        state: present
+      become: yes
+
+    - name: Install prometheus-client into a virtualenv using pip
+      ansible.builtin.pip:
+        name: prometheus-client
+        state: present
+        virtualenv: "{{ venv_dir }}"
+        virtualenv_command: /usr/bin/python3 -m venv
+
+    - name: Copy systemd service file (using venv python)
+      ansible.builtin.template:
+        src: microservice.service.j2
+        dest: /etc/systemd/system/{{ service_name }}.service
+        owner: root
+        group: root
+        mode: '0644'
+      become: yes
+      notify: Reload systemd and restart microservice
+
+    - name: Ensure microservice is enabled and started
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+        enabled: yes
+        state: started
+      become: yes
+
+- name: Tasks for Container deployment method
+  when: deploy_method == 'container'
+  block:
+    - name: Stop and disable systemd service if it exists (switching from vm to container)
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+        state: stopped
+        enabled: no
+      become: yes
+      ignore_errors: yes
+
+    - name: Pause for a few seconds to allow port release
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Copy Dockerfile
+      ansible.builtin.copy:
+        src: ../../../microservice/Dockerfile
+        dest: "{{ app_base_dir }}/Dockerfile"
+        mode: '0644'
+
+    - name: Build container image from Dockerfile
+      community.docker.docker_image:
+        name: "{{ service_name }}:latest"
+        build:
+          path: "{{ app_base_dir }}"
+        source: build
+        state: present
+      become: yes
+
+    - name: Run microservice container
+      community.docker.docker_container:
+        name: "{{ service_name }}"
+        image: "{{ service_name }}:latest"
+        state: started
+        restart_policy: always
+        ports:
+          - "8080:8080"
+        env:
+          HOST_DEPLOYMENT_TYPE: "container"
+      become: yes

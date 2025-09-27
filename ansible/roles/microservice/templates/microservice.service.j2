@@ -1,0 +1,14 @@
+[Unit]
+Description=My Simple Python Microservice ({{ service_name }}) [venv]
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory={{ app_base_dir }}
+ExecStart={{ venv_dir }}/bin/python {{ app_base_dir }}/app.py
+Restart=on-failure
+Environment="HOST_DEPLOYMENT_TYPE=vm"
+
+[Install]
+WantedBy=multi-user.target

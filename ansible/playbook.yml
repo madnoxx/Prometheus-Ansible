@@ -1,0 +1,12 @@
+- name: Deploy Microservice to Rocky Linux
+  hosts: rocky_servers
+  gather_facts: yes
+
+  vars:
+    deploy_method: vm
+    app_base_dir: /opt/myapp
+    venv_dir: "{{ app_base_dir }}/venv"
+    service_name: my_microservice
+
+  roles:
+    - role: microservice
